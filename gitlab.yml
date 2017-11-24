@@ -2,7 +2,7 @@ version: "2"
 services:
       gitlab:
               image: 'gitlab/gitlab-ce:8.14.5-ce.0'
-              hostname: 'swarmmanager3.tac.co.th'
+              hostname: 'swarmmanager3.co.th'
               container_name: gitlab
               ports:
                      - "81:80"
@@ -17,10 +17,10 @@ services:
                      - "./certs:/etc/gitlab/cert"
               environment:
                     GITLAB_OMNIBUS_CONFIG: |
-                        external_url 'http://swarmmanager3.tac.co.th'
+                        external_url 'http://swarmmanager3.co.th'
                         gitlab_rails['gitlab_shell_ssh_port'] = 2222
                         gitlab_rails['tie_zone'] = 'Asia/Bangkok'
-                        registry_external_url 'https://swarmmanager3.tac.co.th'
+                        registry_external_url 'https://swarmmanager3.co.th'
                         registry_nginx['ssl_certificate'] = "/etc/gitlab/cert/domain.crt"
                         registry_nginx['ssl_certificate_key'] = "/etc/gitlab/cert/domain.key"
               restart: "always"
