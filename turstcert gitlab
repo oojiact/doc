@@ -1,0 +1,8 @@
+UBUNTU
+
+$ cp certs/domain.crt /usr/local/share/ca-certificates/myregistrydomain.com.crt
+update-ca-certificates
+RED HAT ENTERPRISE LINUX
+
+cp certs/domain.crt /etc/pki/ca-trust/source/anchors/myregistrydomain.com.crt
+update-ca-trust
