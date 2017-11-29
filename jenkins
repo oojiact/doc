@@ -1,0 +1,18 @@
+bbb
+
+ jenkins:
+  user: root
+  image: darksolar/jenkins
+  restart: always
+  container_name: jenkins
+  environment:
+    - "TZ=ICT-7"
+  volumes:
+    - ./jenkins_home:/var/jenkins_home
+    - /etc/resolv.conf:/etc/resolv.conf
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /etc/hosts:/etc/hosts
+  ports:
+    - 8080:8080
+    - 50000:50000
+  privileged: true
