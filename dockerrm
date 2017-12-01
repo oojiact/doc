@@ -1,1 +1,4 @@
 docker rm `docker ps --no-trunc -aq`
+
+
+curl -L http://updates.jenkins-ci.org/update-center.json | sed '1d;$d' > /var/lib/jenkins/updates/default.json
