@@ -1,0 +1,368 @@
+install gitlab
+
+install docker
+
+gitadm@gitlab21:~$ docker version
+Client:
+Version:      17.03.1-ce
+API version:  1.27
+Go version:   go1.7.5
+Git commit:   c6d412e
+Built:        Mon Mar 27 17:14:09 2017
+OS/Arch:      linux/amd64
+
+Server:
+Version:      17.03.1-ce
+API version:  1.27 (minimum version 1.12)
+Go version:   go1.7.5
+Git commit:   c6d412e
+Built:        Mon Mar 27 17:14:09 2017
+OS/Arch:      linux/amd64
+Experimental: false
+
+install docker-compose
+
+gitadm@gitlab21:~$ docker-compose version
+docker-compose version 1.8.0, build unknown
+docker-py version: 1.9.0
+CPython version: 2.7.12
+OpenSSL version: OpenSSL 1.0.2g  1 Mar 2016
+
+แบ่ง project ตาม team
+
+gitadm@gitlab21:~$ ls
+BAS  CRM  MDW   SP  VAS
+gitadm@gitlab21:~$
+
+ยกตัวอย่าง BAS project
+
+BAS
+
+gitadm@gitlab21:~/BAS$ ls
+gitlab  jenkins
+
+gitlab
+
+โครงสร้าง gitlab
+
+gitadm@gitlab21:~/BAS/gitlab$ pwd
+/home/gitadm/BAS/gitlab
+gitadm@gitlab21:~/BAS/gitlab$ ls -la
+total 28
+drwxrwxr-x  6 gitadm gitadm 4096 Oct 11 11:50 .
+drwxr-xr-x  5 gitadm gitadm 4096 Jun 16 10:52 ..
+drwx------  2    998 gitadm 4096 Oct 11 11:39 certs
+drwxrwxr-x  4 root   root   4096 Jun 15 17:26 config
+drwxr-xr-x 18 root   root   4096 Oct 11 11:39 data
+-rw-r--r--  1 gitadm gitadm 3449 Oct 11 11:38 docker-compose.yaml
+drwxr-xr-x 20    998 gitadm 4096 Jun 15 14:21 logs
+
+docker-compose.yaml
+
+step 1 สร้าง docekr-compose ของ  gitlab
+
+gitadm@gitlab21:~/BAS/gitlab$ vi docker-compose.yaml
+
+#########
+
+version: "2"
+services:
+    bas_gitlab:
+        image: 'gitlab/gitlab-ce:9.2.5-ce.0'
+        hostname: 'bas-devtools.tac.co.th'
+        container_name: bas_gitlab
+        mem_limit: 6192m
+        #mem_limit: 3096m
+        restart: "always"
+        ports:
+            - "9080:80"
+            - "9443:443"
+            - "9022:22"
+            - "5009:5009"
+        volumes:
+            - "/etc/localtime:/etc/localtime:ro"
+            - "./config:/etc/gitlab"
+            - "./logs:/var/log/gitlab"
+            - "./data:/var/opt/gitlab"
+            - "./certs:/var/opt/gitlab/gitlab-rails/etc/"
+            - "./certs:/etc/gitlab/cert"
+        environment:
+            GITLAB_OMNIBUS_CONFIG: |
+                external_url 'http://bas-devtools.tac.co.th'
+                gitlab_rails['gitlab_shell_ssh_port'] = 9022
+                gitlab_rails['time_zone'] = 'Asia/Bangkok'
+                gitlab_rails['rack_attack_git_basic_auth'] = {
+                     'enabled' => false
+                }
+                registry_external_url 'https://bas-devtools.tac.co.th'
+                registry_api_url 'https://bas-devtools.tac.co.th:5009'
+                registry_nginx['listen_port'] = 5009
+                registry_nginx['listen_https'] = false
+                registry_nginx['proxy_set_headers'] = {
+                     "X-Forwarded-Proto" => "https",
+                     "X-Forwarded-Ssl" => "on"
+                }
+                registry_nginx['ssl_certificate'] = "/etc/gitlab/cert/bas-devtools.crt"
+                registry_nginx['ssl_certificate_key'] = "/etc/gitlab/cert/bas-devtools.key"
+                # disable built-in postgresql
+                postgresql["enable"] = "false"
+                # config database
+                gitlab_rails['db_adapter'] = 'postgresql'
+                gitlab_rails['db_encoding'] = 'utf8'
+                gitlab_rails['db_host'] = '10.117.6.36'
+                gitlab_rails['db_port'] = '5432'
+                gitlab_rails['db_database'] = 'gitdb_bas'
+                gitlab_rails['db_username'] = 'gitown'
+                gitlab_rails['db_password'] = 'dtac_2017'
+                # ldap setting
+                gitlab_rails['ldap_enabled'] = true
+                gitlab_rails['ldap_servers'] = YAML.load <<-EOS
+                main:
+                  label: 'LDAP'
+                  host: 'rstads01.tac.co.th'
+                  port: 636
+                  uid: 'sAMAccountName'
+                  method: 'ssl'
+                  bind_dn: 'cn=gitlabadm,ou=users (service account),ou=dtac,dc=tac,dc=co,dc=th'
+                  password: 'GitLab@Dtac2017'
+                  active_directory: true
+                  allow_username_or_email_login: true
+                  block_auto_created_users: true
+                  base: 'ou=dtac,dc=tac,dc=co,dc=th'
+                  user_filter: ''
+                  attributes:
+                    username: ['uid', 'userid', 'sAMAccountName']
+                    email:    ['mail', 'email', 'userPrincipalName']
+                    name:       'cn'
+                    first_name: 'givenName'
+                    last_name:  'sn'
+                  group_base: ''
+                  admin_group: ''
+                  sync_ssh_keys: false
+                EOS
+        logging:
+            driver: "json-file"
+            options:
+                 max-size: 100m
+                 max-file: "5"
+networks:
+    default:
+        external:
+            name: devtools_network
+
+step 2
+
+config certificate
+
+#LINK: https://futurestud.io/tutorials/how-to-run-gitlab-with-self-signed-ssl-certificate
+# details
+
+# 1.
+openssl genrsa -out mdw-devtools.key 2048
+
+# 2.
+openssl req -new -key "bas-devtools.key" -subj "/C=TH/ST=Bangkok/L=Prathumwan/O=DTAC/OU=Enterprise Infrastructure Department/CN=bas-devtools.tac.co.th" -out "bas-devtools.csr"
+
+# 3.
+openssl x509 -req -days 3650 -in "bas-devtools.csr" -signkey "bas-devtools.key" -out "bas-devtools.crt"
+
+step
+
+สร้าง docker-compose ของ nginx เพื่อ เป็น web หน้าบ้าน
+
+gitadm@gitlab21:~/NGINX$ pwd
+/home/gitadm/NGINX
+gitadm@gitlab21:~/NGINX$ ls -l
+total 16
+drwxrwxr-x 4 gitadm gitadm 4096 Oct 10 17:46 conf.d
+-rw-rw-r-- 1 gitadm gitadm  248 Jun 14 15:09 default.html
+-rw-r--r-- 1 gitadm gitadm  783 Aug 25 17:08 docker-compose.yaml
+-rw-rw-r-- 1 gitadm gitadm 3449 Oct  3 16:44 nginx.conf
+gitadm@gitlab21:~/NGINX$
+
+gitadm@gitlab21:~/NGINX$ cat docker-compose.yaml
+version: "2"
+services:
+    nginx:
+        image: 'nginx:1.13.1'
+        hostname: 'gitlab21.tac.co.th'
+        container_name: nginx
+        mem_limit: 200m
+        restart: "always"
+        volumes:
+            - "/etc/localtime:/etc/localtime:ro"
+            - "/home/gitadm/NGINX/nginx.conf:/etc/nginx/nginx.conf:ro"
+            - "/home/gitadm/NGINX/conf.d:/etc/nginx/conf.d:ro"
+        ports:
+            - "80:80"
+            - "443:443"
+        environment:
+            - SET_CONTAINER_TIMEZONE=true
+            - CONTAINER_TIMEZONE=Asia/Bangkok
+            - TZ=ICT-7
+        logging:
+            driver: "json-file"
+            options:
+                max-size: 100m
+                max-file: "5"
+networks:
+    default:
+        external:
+            name: devtools_network
+
+gitadm@gitlab21:~/NGINX$ cat nginx.conf
+#user  nobody;
+worker_processes  1;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    server_tokens off;
+    client_max_body_size 2048m;
+
+    log_format  main  '$remote_addr|$hostname|$remote_user|[$time_local]|$request'
+                      '|$status|$body_bytes_sent|$http_referer'
+                      '|$http_user_agent|$http_x_forwarded_for'
+                      '|$request_time|$upstream_response_time';
+
+    log_format  dev  '$remote_addr|$hostname|$remote_user|[$time_local]|$request'
+                      '|$status|$body_bytes_sent|$http_referer|$http_udid'
+                      '|$http_user_agent|$http_x_forwarded_for'
+                      '|$request_time|$upstream_response_time';
+
+    log_format  test  '$remote_addr|$hostname|$remote_user|[$time_local]|$request'
+                      '|$status|$body_bytes_sent|$http_referer|$http_udid'
+                      '|$http_user_agent|$http_x_forwarded_for'
+                      '|$request_time|$upstream_response_time';
+    log_format  perf  '$remote_addr|$hostname|$remote_user|[$time_local]|$request'
+                      '|$status|$body_bytes_sent|$http_referer|$http_udid'
+                      '|$http_user_agent|$http_x_forwarded_for'
+                      '|$request_time|$upstream_response_time';
+    log_format  prd  '$remote_addr|$hostname|$remote_user|[$time_local]|$request'
+                      '|$status|$body_bytes_sent|$http_referer|$http_udid'
+                      '|$http_user_agent|$http_x_forwarded_for'
+                      '|$request_time|$upstream_response_time';
+
+    access_log  /var/log/nginx/nginx_access.log main;
+    error_log  /var/log/nginx/nginx_error.log;
+
+    sendfile        on;
+    tcp_nodelay     off;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    ssl_session_cache shared:ssl_session_cache:10m;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-GCM-SHA256:AES256+EDH:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!MD5:!PSK:!RC4:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA';
+    #ssl_ciphers 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:HIGH:!aNULL:!eNULL:!EXPORT:!CAMELLIA:!DES:!MD5:!PSK:!RC4';
+    ssl_dhparam conf.d/keystore/dhparam.pem;
+
+    #gzip  on;
+    include conf.d/default.conf;
+    include conf.d/mdw-devtools.conf;
+    include conf.d/sp-devtools.conf;
+    include conf.d/bas-devtools.conf;
+    include conf.d/vas-devtools.conf;
+    include conf.d/crm-devtools.conf;
+}
+
+gitadm@gitlab21:~/NGINX$ cat default.html
+<!DOCTYPE html>
+<html>
+<head>
+<title>Default Pages</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Hello World.</h1>
+</body>
+</html>
+gitadm@gitlab21:~/NGINX$
+
+cat /home/gitadm/NGINX/conf.d/bas-devtools.conf
+
+upstream bas_devtools_gitlab_server {
+    server 10.117.5.53:9080;
+}
+
+upstream bas_devtools_jenkins_server {
+    server 10.117.5.58:8089;
+}
+
+upstream bas_devtools_docker_repository {
+    server 10.117.5.53:5009;
+}
+
+server {
+    listen  80;
+    listen  443  ssl;
+    server_name  bas-devtools.tac.co.th;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    ssl_certificate      conf.d/keystore/bas-devtools.crt;
+    ssl_certificate_key  conf.d/keystore/bas-devtools.key;
+
+    ssl_ciphers  HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers  on;
+
+    access_log  /var/log/nginx/bas_devtools_access.log prd;
+    # redirect server error pages to the static page /50x.html
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   html;
+    }
+
+    location /jenkins {
+        #limit_conn perip 1;
+        proxy_set_header X-Real-IP $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        add_header X-Served-By "My Servlet Handler";
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        proxy_pass   http://bas_devtools_jenkins_server/jenkins;
+    }
+
+    location / {
+        #limit_conn perip 1;
+        proxy_set_header X-Real-IP $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        add_header X-Served-By "My Servlet Handler";
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        proxy_pass   http://bas_devtools_gitlab_server/;
+    }
+
+    location /v2/ {
+        if ($http_user_agent ~ "^(docker\/1\.(3|4|5(?!\.[0-9]-dev))|Go ).*$" ) {
+            return 404;
+        }
+        add_header 'Docker-Distribution-Api-Version' 'registry/2.0' always;
+        proxy_pass  http://bas_devtools_docker_repository;
+        proxy_set_header  Host              $http_host;   # required for docker client's sake
+        proxy_set_header  X-Real-IP         $remote_addr; # pass on real client's IP
+        proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header  X-Forwarded-Proto $scheme;
+        proxy_read_timeout                  900;
+    }
+
+}
