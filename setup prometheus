@@ -1,0 +1,280 @@
+Installation overview of node_exporter, prometheus and grafana
+
+Prometheus is an open source systems monitoring and alerting toolkit originally build at Soundcloud. This blogpost shows how to install the needed components to do visualisation of linux system statistics via Grafana.
+
+The setup consists of 3 components:
+– node_exporter, an exporter of system and hardware metrics.
+– prometheus, a metric collection and persistence layer.
+– grafana, the visualisation layer.
+
+1. Preparation
+The needed components are installed in the home directory of the user ‘prometheus’. In order for that user exist, it must obviously first be created:
+
+1
+2
+3
+# useradd prometheus
+# su - prometheus
+$
+This installation guide uses Oracle Linux 7.3, but should work for RHEL or Centos too.
+
+2. Node exporter
+The next thing to do is install the node exporter. Please mind new version do come out, so you might want to verify the latest release on
+
+1
+2
+3
+4
+$ curl -LO "https://github.com/prometheus/node_exporter/releases/download/v0.14.0/node_exporter-0.14.0.linux-amd64.tar.gz"
+$ mkdir -p Prometheus/node_exporter
+$ cd $_
+$ tar xzf ../../node_exporter-0.14.0.linux-amd64.tar.gz
+Now become root and create a unit file to automatically startup the node exporter using systemd:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+# echo "[Unit]
+Description=Node Exporter
+ 
+[Service]
+User=prometheus
+ExecStart=/home/prometheus/Prometheus/node_exporter/node_exporter-0.14.0.linux-amd64/node_exporter
+ 
+[Install]
+WantedBy=default.target" > /etc/systemd/system/node_exporter.service
+And make systemd start the node exporter:
+
+1
+2
+3
+# systemctl daemon-reload
+# systemctl enable node_exporter.service
+# systemctl start node_exporter.service
+Next you can verify if the node exporter is running by using ‘systemctl status node_exporter.service:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+# systemctl status node_exporter.service
+● node_exporter.service - Node Exporter
+   Loaded: loaded (/etc/systemd/system/node_exporter.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2017-07-31 15:20:54 UTC; 7s ago
+ Main PID: 3017 (node_exporter)
+   CGroup: /system.slice/node_exporter.service
+           └─3017 /home/prometheus/Prometheus/node_exporter/node_exporter-0.14.0.linux-amd64/node_exporter
+ 
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - hwmon" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - infiniband" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - textfile" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - conntrack" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - diskstats" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - entropy" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - loadavg" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - sockstat" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg=" - wifi" source="node_exporter.go:162"
+Jul 31 15:20:54 test.local node_exporter[3017]: time="2017-07-31T15:20:54Z" level=info msg="Listening on :9100" source="node_exporter.go:186"
+Additionally, you can go to hostname:9100, and look if that page says ‘node exporter’, and has a link called ‘metric’, which has all the metrics.
+
+3. Prometheus
+After we installed node_exporter to provide measurements, we must install the software that can fetch that information and store it. That is what prometheus does. First, become the prometheus user again, and install prometheus. Here too is important to realise that newer versions will come out after this article has been written:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+# su - prometheus
+$ curl -LO "https://github.com/prometheus/prometheus/releases/download/v1.7.1/prometheus-1.7.1.linux-amd64.tar.gz"
+$ cd Prometheus
+$ tar xzf ../prometheus-1.7.1.linux-amd64.tar.gz
+$ cd prometheus-1.7.1.linux-amd64
+$ echo "scrape_configs:
+ 
+  - job_name: 'prometheus'
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['localhost:9090']
+ 
+  - job_name: 'node_exporter'
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['localhost:9100']"> prometheus.yml
+This downloaded and unzipped prometheus, and created prometheus scrape config to fetch data from prometheus itself and the node exporter. Now become root, and install the systemd unit file for prometheus:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+# echo "[Unit]
+Description=Prometheus Server
+Documentation=https://prometheus.io/docs/introduction/overview/
+After=network-online.target
+ 
+[Service]
+User=prometheus
+Restart=on-failure
+ExecStart=/home/prometheus/Prometheus/prometheus-1.7.1.linux-amd64/prometheus -config.file=/home/prometheus/Prometheus/prometheus-1.7.1.linux-amd64/prometheus.yml -storage.local.path=/home/prometheus/Prometheus/prometheus-1.7.1.linux-amd64/data
+ 
+[Install]
+WantedBy=multi-user.target" > /etc/systemd/system/prometheus.service
+And make systemd start prometheus:
+
+1
+2
+3
+# systemctl daemon-reload
+# systemctl enable prometheus.service
+# systemctl start prometheus.service
+And verify prometheus is running:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+# systemctl status prometheus.service
+● prometheus.service - Prometheus Server
+   Loaded: loaded (/etc/systemd/system/prometheus.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2017-07-31 15:36:55 UTC; 9s ago
+     Docs: https://prometheus.io/docs/introduction/overview/
+ Main PID: 22656 (prometheus)
+   CGroup: /system.slice/prometheus.service
+           └─22656 /home/prometheus/Prometheus/prometheus-1.7.1.linux-amd64/prometheus -config.file=/home/prometheus/Prometheus/prometheus-1.7.1....
+ 
+Jul 31 15:36:55 test.local systemd[1]: Started Prometheus Server.
+Jul 31 15:36:55 test.local systemd[1]: Starting Prometheus Server...
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="Starting prometheus (version=1.7.1, branch=mast...n.go:88"
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="Build context (go=go1.8.3, user=root@0aa1b7fc43...n.go:89"
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="Host details (Linux 3.10.0-514.26.2.el7.x86_64 ...n.go:90"
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="Loading configuration file /home/prometheus/Pro....go:252"
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="Loading series map and head chunks..." source="....go:428"
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="0 series loaded." source="storage.go:439"
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="Starting target manager..." source="targetmanager.go:63"
+Jul 31 15:36:55 test.local prometheus[22656]: time="2017-07-31T15:36:55Z" level=info msg="Listening on :9090" source="web.go:259"
+Hint: Some lines were ellipsized, use -l to show in full.
+Additionally you can go to hostname:9090/targets and verify both node_exporter and prometheus report state=UP.
+
+At this point, system metrics are fetched and stored. All we need to do, is visualise it. An excellent tool for doing so is grafana. This is how grafana is installed:
+
+4. Grafana
+This webpage shows installation instructions and a link to the latest version. During the time of writing of this blogpost, the latest version was 4.1.1. This is how grafana is installed: (please mind installation and systemd require root privileges)
+
+1
+# yum install https://s3-us-west-2.amazonaws.com/grafana-releases/release/grafana-4.4.1-1.x86_64.rpm
+Next up make systemd handle grafana and start it:
+
+1
+2
+3
+# systemctl daemon-reload
+# systemctl enable grafana-server.service
+# systemctl start grafana-server.service
+And check if grafana is running:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+# systemctl status grafana-server.service
+● grafana-server.service - Grafana instance
+   Loaded: loaded (/usr/lib/systemd/system/grafana-server.service; enabled; vendor preset: disabled)
+   Active: active (running) since Mon 2017-07-31 15:43:11 UTC; 1min 58s ago
+     Docs: http://docs.grafana.org
+ Main PID: 22788 (grafana-server)
+   CGroup: /system.slice/grafana-server.service
+           └─22788 /usr/sbin/grafana-server --config=/etc/grafana/grafana.ini --pidfile= cfg:default.paths.logs=/var/log/grafana cfg:default.path...
+ 
+Jul 31 15:43:12 test.local grafana-server[22788]: t=2017-07-31T15:43:12+0000 lvl=info msg="Starting plugin search" logger=plugins
+Jul 31 15:43:12 test.local grafana-server[22788]: t=2017-07-31T15:43:12+0000 lvl=warn msg="Plugin dir does not exist" logger=plugins dir=/...plugins
+Jul 31 15:43:12 test.local grafana-server[22788]: t=2017-07-31T15:43:12+0000 lvl=info msg="Plugin dir created" logger=plugins dir=/var/lib...plugins
+Jul 31 15:43:12 test.local grafana-server[22788]: t=2017-07-31T15:43:12+0000 lvl=info msg="Initializing Alerting" logger=alerting.engine
+Jul 31 15:43:12 test.local grafana-server[22788]: t=2017-07-31T15:43:12+0000 lvl=info msg="Initializing CleanUpService" logger=cleanup
+Jul 31 15:43:12 test.local grafana-server[22788]: t=2017-07-31T15:43:12+0000 lvl=info msg="Initializing Stream Manager"
+Jul 31 15:43:12 test.local grafana-server[22788]: t=2017-07-31T15:43:12+0000 lvl=info msg="Initializing HTTP Server" logger=http.server ad...socket=
+Jul 31 15:44:34 test.local grafana-server[22788]: t=2017-07-31T15:44:34+0000 lvl=info msg="Request Completed" logger=context userId=0 orgI...eferer=
+Jul 31 15:44:34 test.local grafana-server[22788]: t=2017-07-31T15:44:34+0000 lvl=info msg="Request Completed" logger=context userId=0 orgI...eferer=
+Jul 31 15:44:34 test.local grafana-server[22788]: t=2017-07-31T15:44:34+0000 lvl=info msg="Request Completed" logger=context userId=0 orgI...eferer=
+Hint: Some lines were ellipsized, use -l to show in full.
+5. Grafana configuration
+Next, we need to hook up grafana with prometheus. First, go to hostname:3000.
+– Login with admin/admin
+– Click ‘add datasource’
+– Name: prometheus, Type: Prometheus
+– Http settings: http://localhost:9090, select Access: ‘proxy’.
+– Click ‘save and test’. This should result in ‘success’ and ‘datasource updated.’
+
+Now click on the grafana symbol in the left upper corner, dashboards, import. Enter ‘2747’ at ‘grafana.com dashboard’. This will say ‘Linux memory’, select the prometheus datasource which you just defined, and click import.
+
+This should result in a dashboard the shows you the linux memory area’s (click on the picture to get a better view!):
