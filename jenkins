@@ -1,4 +1,5 @@
-bbb
+version: '2'
+services: 
 
  jenkins:
   user: root
