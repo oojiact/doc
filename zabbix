@@ -61,3 +61,7 @@ services:
       - /var/run:/var/run
     environment:
       - ZA_Server=10.117.28.7
+      
+     
+https://github.com/monitoringartist/dockbix-xxl
+
